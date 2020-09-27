@@ -321,10 +321,61 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{Additive, LazySegtree, MapMonoid, Max};
+    use proptest::prelude::*;
+    use std::cmp::max;
 
     impl MapMonoid<Max<i32>> for Additive<i32> {
         fn mapping(&f: &i32, &x: &i32) -> i32 {
             f + x
+        }
+    }
+
+    #[derive(Debug)]
+    struct Case0<T> {
+        base: Vec<T>,
+        apply_range_queries: Vec<(usize, usize, T)>,
+        prod_queries: Vec<(usize, usize)>,
+    }
+    fn case0(max_len: usize, max_q: usize) -> impl Strategy<Value = Case0<i32>> {
+        (1..max_len, 1..max_q).prop_flat_map(|(n, q)| {
+            let vrange = -1000..1000;
+            let base = prop::collection::vec(vrange.clone(), n);
+            let apply_range_queries = prop::collection::vec(
+                (0..n, 0..=n, vrange)
+                    .prop_map(|(x, y, z)| if x > y { (y, x, z) } else { (x, y, z) }),
+                q,
+            );
+            let prod_queries = prop::collection::vec(
+                (0..n, 0..=n).prop_map(|(x, y)| if x > y { (y, x) } else { (x, y) }),
+                q,
+            );
+            (base, apply_range_queries, prod_queries).prop_map(|(x, y, z)| Case0 {
+                base: x,
+                apply_range_queries: y,
+                prod_queries: z,
+            })
+        })
+    }
+    proptest! {
+        #[test]
+        fn proptest_max_add_lazy_segtree(
+            Case0 {
+                mut base,
+                apply_range_queries,
+                prod_queries,
+            } in case0(500,10)
+        ) {
+            let mut segtree: LazySegtree<Additive<_>, Max<_>> = base.clone().into();
+            for ((l0, r0, v), (l1, r1)) in apply_range_queries.into_iter().zip(prod_queries) {
+                for i in l0..r0 {
+                    base[i] += v;
+                }
+                segtree.apply_range(l0, r0, v);
+                assert_eq!(
+                    base[l1..r1].iter().cloned().max().unwrap_or(std::i32::MIN),
+                    segtree.prod(l1, r1)
+                );
+            }
         }
     }
 

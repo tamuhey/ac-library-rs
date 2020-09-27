@@ -11,3 +11,4 @@ publish = false
 
 [dev-dependencies]
 rand = "0.7.3"
+proptest = "0.10.1"
