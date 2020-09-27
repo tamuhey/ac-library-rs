@@ -322,7 +322,6 @@ where
 mod tests {
     use crate::{Additive, LazySegtree, MapMonoid, Max};
     use proptest::prelude::*;
-    use std::cmp::max;
 
     impl MapMonoid<Max<i32>> for Additive<i32> {
         fn mapping(&f: &i32, &x: &i32) -> i32 {
