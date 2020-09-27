@@ -1,41 +1,40 @@
 use crate::internal_bit::ceil_pow2;
 use crate::Monoid;
 
-pub trait MapMonoid {
-    type M: Monoid;
-    type F: Clone;
-    // type S = <Self::M as Monoid>::S;
-    fn identity_element() -> <Self::M as Monoid>::S {
-        Self::M::identity()
-    }
-    fn binary_operation(
-        a: &<Self::M as Monoid>::S,
-        b: &<Self::M as Monoid>::S,
-    ) -> <Self::M as Monoid>::S {
-        Self::M::binary_operation(a, b)
-    }
-    fn identity_map() -> Self::F;
-    fn mapping(f: &Self::F, x: &<Self::M as Monoid>::S) -> <Self::M as Monoid>::S;
-    fn composition(f: &Self::F, g: &Self::F) -> Self::F;
+pub trait MapMonoid<M: Monoid>: Monoid {
+    fn mapping(f: &Self::S, x: &M::S) -> M::S;
 }
 
-impl<F: MapMonoid> Default for LazySegtree<F> {
+impl<F, M> Default for LazySegtree<F, M>
+where
+    M: Monoid,
+    F: MapMonoid<M>,
+{
     fn default() -> Self {
         Self::new(0)
     }
 }
-impl<F: MapMonoid> LazySegtree<F> {
+impl<F, M> LazySegtree<F, M>
+where
+    M: Monoid,
+    F: MapMonoid<M>,
+{
     pub fn new(n: usize) -> Self {
-        vec![F::identity_element(); n].into()
+        vec![M::identity(); n].into()
     }
 }
-impl<F: MapMonoid> From<Vec<<F::M as Monoid>::S>> for LazySegtree<F> {
-    fn from(v: Vec<<F::M as Monoid>::S>) -> Self {
+
+impl<F, M> From<Vec<M::S>> for LazySegtree<F, M>
+where
+    M: Monoid,
+    F: MapMonoid<M>,
+{
+    fn from(v: Vec<M::S>) -> Self {
         let n = v.len();
         let log = ceil_pow2(n as u32) as usize;
         let size = 1 << log;
-        let mut d = vec![F::identity_element(); 2 * size];
-        let lz = vec![F::identity_map(); size];
+        let mut d = vec![M::identity(); 2 * size];
+        let lz = vec![F::identity(); size];
         d[size..(size + n)].clone_from_slice(&v);
         let mut ret = LazySegtree {
             n,
@@ -51,8 +50,12 @@ impl<F: MapMonoid> From<Vec<<F::M as Monoid>::S>> for LazySegtree<F> {
     }
 }
 
-impl<F: MapMonoid> LazySegtree<F> {
-    pub fn set(&mut self, mut p: usize, x: <F::M as Monoid>::S) {
+impl<F, M> LazySegtree<F, M>
+where
+    M: Monoid,
+    F: MapMonoid<M>,
+{
+    pub fn set(&mut self, mut p: usize, x: M::S) {
         assert!(p < self.n);
         p += self.size;
         for i in (1..=self.log).rev() {
@@ -64,7 +67,7 @@ impl<F: MapMonoid> LazySegtree<F> {
         }
     }
 
-    pub fn get(&mut self, mut p: usize) -> <F::M as Monoid>::S {
+    pub fn get(&mut self, mut p: usize) -> M::S {
         assert!(p < self.n);
         p += self.size;
         for i in (1..=self.log).rev() {
@@ -73,10 +76,10 @@ impl<F: MapMonoid> LazySegtree<F> {
         self.d[p].clone()
     }
 
-    pub fn prod(&mut self, mut l: usize, mut r: usize) -> <F::M as Monoid>::S {
+    pub fn prod(&mut self, mut l: usize, mut r: usize) -> M::S {
         assert!(l <= r && r <= self.n);
         if l == r {
-            return F::identity_element();
+            return M::identity();
         }
 
         l += self.size;
@@ -91,29 +94,29 @@ impl<F: MapMonoid> LazySegtree<F> {
             }
         }
 
-        let mut sml = F::identity_element();
-        let mut smr = F::identity_element();
+        let mut sml = M::identity();
+        let mut smr = M::identity();
         while l < r {
             if l & 1 != 0 {
-                sml = F::binary_operation(&sml, &self.d[l]);
+                sml = M::binary_operation(&sml, &self.d[l]);
                 l += 1;
             }
             if r & 1 != 0 {
                 r -= 1;
-                smr = F::binary_operation(&self.d[r], &smr);
+                smr = M::binary_operation(&self.d[r], &smr);
             }
             l >>= 1;
             r >>= 1;
         }
 
-        F::binary_operation(&sml, &smr)
+        M::binary_operation(&sml, &smr)
     }
 
-    pub fn all_prod(&self) -> <F::M as Monoid>::S {
+    pub fn all_prod(&self) -> M::S {
         self.d[1].clone()
     }
 
-    pub fn apply(&mut self, mut p: usize, f: F::F) {
+    pub fn apply(&mut self, mut p: usize, f: F::S) {
         assert!(p < self.n);
         p += self.size;
         for i in (1..=self.log).rev() {
@@ -124,7 +127,7 @@ impl<F: MapMonoid> LazySegtree<F> {
             self.update(p >> i);
         }
     }
-    pub fn apply_range(&mut self, mut l: usize, mut r: usize, f: F::F) {
+    pub fn apply_range(&mut self, mut l: usize, mut r: usize, f: F::S) {
         assert!(l <= r && r <= self.n);
         if l == r {
             return;
@@ -173,10 +176,10 @@ impl<F: MapMonoid> LazySegtree<F> {
 
     pub fn max_right<G>(&mut self, mut l: usize, g: G) -> usize
     where
-        G: Fn(<F::M as Monoid>::S) -> bool,
+        G: Fn(M::S) -> bool,
     {
         assert!(l <= self.n);
-        assert!(g(F::identity_element()));
+        assert!(g(M::identity()));
         if l == self.n {
             return self.n;
         }
@@ -184,17 +187,17 @@ impl<F: MapMonoid> LazySegtree<F> {
         for i in (1..=self.log).rev() {
             self.push(l >> i);
         }
-        let mut sm = F::identity_element();
+        let mut sm = M::identity();
         while {
             // do
             while l % 2 == 0 {
                 l >>= 1;
             }
-            if !g(F::binary_operation(&sm, &self.d[l])) {
+            if !g(M::binary_operation(&sm, &self.d[l])) {
                 while l < self.size {
                     self.push(l);
                     l *= 2;
-                    let res = F::binary_operation(&sm, &self.d[l]);
+                    let res = M::binary_operation(&sm, &self.d[l]);
                     if g(res.clone()) {
                         sm = res;
                         l += 1;
@@ -202,7 +205,7 @@ impl<F: MapMonoid> LazySegtree<F> {
                 }
                 return l - self.size;
             }
-            sm = F::binary_operation(&sm, &self.d[l]);
+            sm = M::binary_operation(&sm, &self.d[l]);
             l += 1;
             //while
             {
@@ -215,10 +218,10 @@ impl<F: MapMonoid> LazySegtree<F> {
 
     pub fn min_left<G>(&mut self, mut r: usize, g: G) -> usize
     where
-        G: Fn(<F::M as Monoid>::S) -> bool,
+        G: Fn(M::S) -> bool,
     {
         assert!(r <= self.n);
-        assert!(g(F::identity_element()));
+        assert!(g(M::identity()));
         if r == 0 {
             return 0;
         }
@@ -226,18 +229,18 @@ impl<F: MapMonoid> LazySegtree<F> {
         for i in (1..=self.log).rev() {
             self.push((r - 1) >> i);
         }
-        let mut sm = F::identity_element();
+        let mut sm = M::identity();
         while {
             // do
             r -= 1;
             while r > 1 && r % 2 != 0 {
                 r >>= 1;
             }
-            if !g(F::binary_operation(&self.d[r], &sm)) {
+            if !g(M::binary_operation(&self.d[r], &sm)) {
                 while r < self.size {
                     self.push(r);
                     r = 2 * r + 1;
-                    let res = F::binary_operation(&self.d[r], &sm);
+                    let res = M::binary_operation(&self.d[r], &sm);
                     if g(res.clone()) {
                         sm = res;
                         r -= 1;
@@ -245,7 +248,7 @@ impl<F: MapMonoid> LazySegtree<F> {
                 }
                 return r + 1 - self.size;
             }
-            sm = F::binary_operation(&self.d[r], &sm);
+            sm = M::binary_operation(&self.d[r], &sm);
             // while
             {
                 let r = r as isize;
@@ -256,43 +259,46 @@ impl<F: MapMonoid> LazySegtree<F> {
     }
 }
 
-pub struct LazySegtree<F>
+pub struct LazySegtree<F, M>
 where
-    F: MapMonoid,
+    M: Monoid,
+    F: MapMonoid<M>,
 {
     n: usize,
     size: usize,
     log: usize,
-    d: Vec<<F::M as Monoid>::S>,
-    lz: Vec<F::F>,
+    d: Vec<M::S>,
+    lz: Vec<F::S>,
 }
-impl<F> LazySegtree<F>
+impl<F, M> LazySegtree<F, M>
 where
-    F: MapMonoid,
+    M: Monoid,
+    F: MapMonoid<M>,
 {
     fn update(&mut self, k: usize) {
-        self.d[k] = F::binary_operation(&self.d[2 * k], &self.d[2 * k + 1]);
+        self.d[k] = M::binary_operation(&self.d[2 * k], &self.d[2 * k + 1]);
     }
-    fn all_apply(&mut self, k: usize, f: F::F) {
+    fn all_apply(&mut self, k: usize, f: F::S) {
         self.d[k] = F::mapping(&f, &self.d[k]);
         if k < self.size {
-            self.lz[k] = F::composition(&f, &self.lz[k]);
+            self.lz[k] = F::binary_operation(&f, &self.lz[k]);
         }
     }
     fn push(&mut self, k: usize) {
         self.all_apply(2 * k, self.lz[k].clone());
         self.all_apply(2 * k + 1, self.lz[k].clone());
-        self.lz[k] = F::identity_map();
+        self.lz[k] = F::identity();
     }
 }
 
 // TODO is it useful?
 use std::fmt::{Debug, Error, Formatter, Write};
-impl<F> Debug for LazySegtree<F>
+impl<F, M> Debug for LazySegtree<F, M>
 where
-    F: MapMonoid,
-    F::F: Debug,
-    <F::M as Monoid>::S: Debug,
+    M: Monoid,
+    F: MapMonoid<M>,
+    F::S: Debug,
+    M::S: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         for i in 0..self.log {
@@ -314,23 +320,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{LazySegtree, MapMonoid, Max};
+    use crate::{Additive, LazySegtree, MapMonoid, Max};
 
-    struct MaxAdd;
-    impl MapMonoid for MaxAdd {
-        type M = Max<i32>;
-        type F = i32;
-
-        fn identity_map() -> Self::F {
-            0
-        }
-
+    impl MapMonoid<Max<i32>> for Additive<i32> {
         fn mapping(&f: &i32, &x: &i32) -> i32 {
             f + x
-        }
-
-        fn composition(&f: &i32, &g: &i32) -> i32 {
-            f + g
         }
     }
 
@@ -338,10 +332,10 @@ mod tests {
     fn test_max_add_lazy_segtree() {
         let base = vec![3, 1, 4, 1, 5, 9, 2, 6, 5, 3];
         let n = base.len();
-        let mut segtree: LazySegtree<MaxAdd> = base.clone().into();
+        let mut segtree: LazySegtree<Additive<_>, Max<_>> = base.clone().into();
         check_segtree(&base, &mut segtree);
 
-        let mut segtree = LazySegtree::<MaxAdd>::new(n);
+        let mut segtree = LazySegtree::<Additive<_>, Max<_>>::new(n);
         let mut internal = vec![i32::min_value(); n];
         for i in 0..n {
             segtree.set(i, base[i]);
@@ -367,7 +361,7 @@ mod tests {
     }
 
     //noinspection DuplicatedCode
-    fn check_segtree(base: &[i32], segtree: &mut LazySegtree<MaxAdd>) {
+    fn check_segtree(base: &[i32], segtree: &mut LazySegtree<Additive<i32>, Max<i32>>) {
         let n = base.len();
         #[allow(clippy::needless_range_loop)]
         for i in 0..n {

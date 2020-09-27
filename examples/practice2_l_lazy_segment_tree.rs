@@ -14,14 +14,17 @@ impl Monoid for M {
     }
 }
 struct F;
-impl MapMonoid for F {
-    type M = M;
-    type F = bool;
-
-    fn identity_map() -> Self::F {
+impl Monoid for F {
+    type S = bool;
+    fn identity() -> Self::S {
         false
     }
-    fn mapping(&f: &Self::F, &(a, b, c): &<M as Monoid>::S) -> <M as Monoid>::S {
+    fn binary_operation(a: &Self::S, b: &Self::S) -> Self::S {
+        a ^ b
+    }
+}
+impl MapMonoid<M> for F {
+    fn mapping(&f: &Self::S, &(a, b, c): &<M as Monoid>::S) -> <M as Monoid>::S {
         if f {
             // (a + b) * (a + b - 1) / 2 - a * (a - 1) / 2 - b * (b - 1) / 2 - c
             // = a * b - c
@@ -29,9 +32,6 @@ impl MapMonoid for F {
         } else {
             (a, b, c)
         }
-    }
-    fn composition(&f: &Self::F, &g: &Self::F) -> Self::F {
-        f ^ g
     }
 }
 
@@ -42,7 +42,7 @@ fn main() {
 
     let n = input.next().unwrap().parse().unwrap();
     let q = input.next().unwrap().parse().unwrap();
-    let mut segtree: LazySegtree<F> = iter::once((0, 0, 0))
+    let mut segtree: LazySegtree<F, M> = iter::once((0, 0, 0))
         .chain(input.by_ref().take(n).map(|s| match s {
             "0" => (1, 0, 0),
             "1" => (0, 1, 0),

@@ -15,21 +15,18 @@ impl Monoid for Sum {
     }
 }
 struct Affine;
-impl MapMonoid for Affine {
-    type M = Sum;
-    type F = (Mint, Mint);
-
-    fn identity_map() -> Self::F {
+impl Monoid for Affine {
+    type S = (Mint, Mint);
+    fn identity() -> Self::S {
         (1.into(), 0.into())
     }
-
-    fn mapping(&(a, b): &Self::F, &(x, n): &<Self::M as Monoid>::S) -> <Self::M as Monoid>::S {
-        (a * x + b * Mint::new(n), n)
-    }
-
-    // a(cx + d) + b = (ac)x + (ad+b)
-    fn composition(&(a, b): &Self::F, &(c, d): &Self::F) -> Self::F {
+    fn binary_operation(&(a, b): &Self::S, &(c, d): &Self::S) -> Self::S {
         (a * c, a * d + b)
+    }
+}
+impl MapMonoid<Sum> for Affine {
+    fn mapping(&(a, b): &Self::S, &(x, n): &<Sum as Monoid>::S) -> <Sum as Monoid>::S {
+        (a * x + b * Mint::new(n), n)
     }
 }
 
@@ -41,7 +38,7 @@ fn main() {
 
     let n = input.next().unwrap().parse().unwrap();
     let q = input.next().unwrap().parse().unwrap();
-    let mut segtree: LazySegtree<Affine> = input
+    let mut segtree: LazySegtree<Affine, Sum> = input
         .by_ref()
         .take(n)
         .map(|s| (s.parse().unwrap(), 1))
